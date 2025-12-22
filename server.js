@@ -102,7 +102,7 @@ app.post('/buy', authenticateJWT, async (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 sequelize.sync().then(async () => {
-  console.log('Database terhubung & Struktur Concert diperbarui.');
+  console.log('Database terhubung.');
 
   if (await Concert.count() === 0) {
     await Concert.bulkCreate([
