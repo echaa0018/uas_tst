@@ -98,6 +98,33 @@ app.post('/buy', authenticateJWT, async (req, res) => {
   }
 });
 
+// --- ENDPOINT: LIHAT RIWAYAT PESANAN SAYA ---
+app.get('/my-orders', authenticateJWT, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Mencari semua transaksi milik user yang sedang login
+    const orders = await Transaction.findAll({
+      where: { userId: userId },
+      include: [
+        {
+          model: Concert,
+          attributes: ['name', 'venue', 'date', 'price'] // Hanya ambil kolom yang penting
+        }
+      ],
+      order: [['createdAt', 'DESC']] // Urutkan dari yang terbaru
+    });
+
+    if (orders.length === 0) {
+      return res.json({ message: "Anda belum memiliki riwayat pemesanan." });
+    }
+
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // --- SERVER START ---
 const PORT = process.env.PORT || 3000;
 
