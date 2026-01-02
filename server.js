@@ -23,7 +23,6 @@ const authenticateJWT = (req, res, next) => {
 };
 
 // --- AUTH ROUTES ---
-
 app.post('/auth/register', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -52,7 +51,7 @@ app.get('/concerts', async (req, res) => {
   res.json(concerts);
 });
 
-// Logic Pembelian Tiket
+// Pembelian Tiket
 app.post('/buy', authenticateJWT, async (req, res) => {
   const { concertId, amount } = req.body;
   const userId = req.user.id;
@@ -63,7 +62,7 @@ app.post('/buy', authenticateJWT, async (req, res) => {
 
     if (!concert) throw new Error('Konser tidak ditemukan');
 
-    // 1. Validasi Waktu: Maksimal 1 minggu sebelum konser
+    // Validasi Waktu: Maksimal 1 minggu sebelum konser
     const now = new Date();
     const concertDate = new Date(concert.date);
     const deadline = new Date(concertDate.getTime() - (7 * 24 * 60 * 60 * 1000));
@@ -72,13 +71,13 @@ app.post('/buy', authenticateJWT, async (req, res) => {
       throw new Error('Penjualan ditutup. Pembelian harus dilakukan maksimal H-7 konser.');
     }
 
-    // 2. Validasi Stok
+    // Validasi Stok
     if (concert.stock < amount) throw new Error('Stok tidak mencukupi');
 
-    // 3. Hitung Total Harga
+    // Hitung Total Harga
     const total = concert.price * amount;
 
-    // 4. Update Stok & Simpan Transaksi
+    // Update Stok & Simpan Transaksi
     concert.stock -= amount;
     await concert.save({ transaction: t });
 
@@ -98,7 +97,7 @@ app.post('/buy', authenticateJWT, async (req, res) => {
   }
 });
 
-// --- ENDPOINT: LIHAT RIWAYAT PESANAN SAYA ---
+// --- ENDPOINT: LIHAT HISTORY PESANAN USER ---
 app.get('/my-orders', authenticateJWT, async (req, res) => {
   try {
     const userId = req.user.id;
