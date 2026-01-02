@@ -62,6 +62,23 @@ app.post('/buy', authenticateJWT, async (req, res) => {
 
     if (!concert) throw new Error('Konser tidak ditemukan');
 
+// 1. Cek berapa tiket yang SUDAH dibeli user ini untuk konser ini sebelumnya
+    const existingTickets = await Transaction.sum('amount', {
+      where: {
+        userId: userId,
+        concertId: concertId
+      },
+      transaction: t
+    });
+
+    // Jika belum pernah beli, existingTickets akan null, jadi kita set ke 0
+    const totalOwned = existingTickets || 0;
+
+    // 2. Cek apakah total tiket yang dimiliki + yang akan dibeli melebihi 2
+    if (totalOwned + amount > 2) {
+      throw new Error(`Maksimal total tiket per akun untuk satu konser adalah 2.`);
+    }
+
     // Validasi Waktu: Maksimal 1 minggu sebelum konser
     const now = new Date();
     const concertDate = new Date(concert.date);
@@ -108,7 +125,7 @@ app.get('/my-orders', authenticateJWT, async (req, res) => {
       include: [
         {
           model: Concert,
-          attributes: ['name', 'venue', 'date', 'price'] // Hanya ambil kolom yang penting
+          attributes: ['name', 'artist', 'venue', 'date', 'price'] // Hanya ambil kolom yang penting
         }
       ],
       order: [['createdAt', 'DESC']] // Urutkan dari yang terbaru
@@ -127,25 +144,83 @@ app.get('/my-orders', authenticateJWT, async (req, res) => {
 // --- SERVER START ---
 const PORT = process.env.PORT || 3000;
 
-sequelize.sync().then(async () => {
+sequelize.sync({ alter: true }).then(async () => {
   console.log('Database terhubung.');
 
   if (await Concert.count() === 0) {
     await Concert.bulkCreate([
       { 
-        name: 'POISONYA SYNDROME', 
+        name: 'POISONYA SYNDROME',
+        artist: 'Nekomata Okayu', 
         price: 50, 
         stock: 3000, 
         venue: 'Tachikawa Stage Garden', 
-        date: new Date('2026-11-15 20:00:00') 
+        date: new Date('2026-09-30 20:00:00') 
       },
       { 
-        name: "Ahoy!! You're All Pirates", 
+        name: 'PERSONYA RESPECT',
+        artist: 'Nekomata Okayu', 
+        price: 60, 
+        stock: 12000, 
+        venue: 'Pia Arena MM', 
+        date: new Date('2027-05-28 20:00:00') 
+      },
+      { 
+        name: "Ahoy!! You're All Pirates",
+        artist: 'Houshou Marine', 
         price: 70, 
         stock: 20000, 
         venue: 'K-Arena', 
-        date: new Date('2026-02-10 19:00:00') 
-      }
+        date: new Date('2026-12-07 19:00:00') 
+      },
+      {
+        name: 'FBKINGDOM "ANTHEM"',
+        artist: 'Fubuki Shirakami',
+        price: 60,
+        stock: 12000,
+        venue: 'Pia Arena MM',
+        date: new Date('2027-02-13 18:00:00')
+      },
+      { 
+        name: 'USAGI the MEGAMI!!-',
+        artist: 'Usada Pekora',
+        price: 55,
+        stock: 15000,
+        venue: 'Ariake Arena',
+        date: new Date('2026-12-06 18:00:00')
+      },
+      { 
+        name: 'Our Sparkle',
+        artist: 'Ookami Mio',
+        price: 50,
+        stock: 12000,
+        venue: 'Pia Arena MM',
+        date: new Date('2026-09-10 18:00:00')
+      },
+      { 
+        name: 'LOCK ON',
+        artist: 'Amane Kanata',
+        price: 52,
+        stock: 15000,
+        venue: 'Ariake Arena',
+        date: new Date('2026-08-13 18:00:00')
+      },
+      { 
+        name: 'Break your xxx',
+        artist: 'Tokoyami Towa',
+        price: 50,
+        stock: 3000,
+        venue: 'Tachikawa Stage Garden',
+        date: new Date('2026-10-13 18:00:00')
+      },
+      { 
+        name: 'SHINier',
+        artist: 'Tokoyami Towa',
+        price: 50,
+        stock: 15000,
+        venue: 'Ariake Arena',
+        date: new Date('2027-10-29 18:00:00')
+      },
     ]);
   }
 

@@ -22,6 +22,7 @@ const User = sequelize.define('User', {
 // 2. Model Concert
 const Concert = sequelize.define('Concert', {
   name: { type: DataTypes.STRING, allowNull: false },
+  artist: { type: DataTypes.STRING, allowNull: false },
   price: { type: DataTypes.INTEGER, allowNull: false },
   stock: { type: DataTypes.INTEGER, allowNull: false },
   venue: { type: DataTypes.STRING, allowNull: false },
