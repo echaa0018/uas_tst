@@ -34,8 +34,13 @@ const Transaction = sequelize.define('Transaction', {
   amount: { type: DataTypes.INTEGER, allowNull: false },
   totalPrice: { type: DataTypes.INTEGER, allowNull: false }
 }, { 
-  timestamps: true // Mengaktifkan createdAt untuk riwayat transaksi
+  timestamps: true
 });
+
+// 4. NEW MODEL: TransactionAddon
+const TransactionAddon = sequelize.define('TransactionAddon', {
+  item_name: { type: DataTypes.STRING, allowNull: false }
+}, { timestamps: false });
 
 // Definisi Relasi
 User.hasMany(Transaction, { foreignKey: 'userId' });
@@ -44,4 +49,8 @@ Transaction.belongsTo(User, { foreignKey: 'userId' });
 Concert.hasMany(Transaction, { foreignKey: 'concertId' });
 Transaction.belongsTo(Concert, { foreignKey: 'concertId' });
 
-module.exports = { sequelize, Concert, Transaction, User };
+// Relasi baru untuk Addon
+Transaction.hasMany(TransactionAddon, { foreignKey: 'transactionId' });
+TransactionAddon.belongsTo(Transaction, { foreignKey: 'transactionId' });
+
+module.exports = { sequelize, Concert, Transaction, User, TransactionAddon };

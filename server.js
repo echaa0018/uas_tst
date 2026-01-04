@@ -3,13 +3,14 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { sequelize, Concert, Transaction, User } = require('./models');
+// Import TransactionAddon here
+const { sequelize, Concert, Transaction, User, TransactionAddon } = require('./models');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Middleware: Verifikasi JWT
+// ... (Middleware authenticateJWT stays the same) ...
 const authenticateJWT = (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -24,7 +25,7 @@ const authenticateJWT = (req, res, next) => {
   }
 };
 
-// --- AUTH ROUTES ---
+// ... (Auth Routes stay the same) ...
 app.post('/auth/register', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -46,16 +47,15 @@ app.post('/auth/login', async (req, res) => {
   res.json({ token });
 });
 
-// --- CONCERT ROUTES ---
-
 app.get('/concerts', async (req, res) => {
   const concerts = await Concert.findAll();
   res.json(concerts);
 });
 
-// Pembelian Tiket
+// Pembelian Tiket (UPDATED)
 app.post('/buy', authenticateJWT, async (req, res) => {
-  const { concertId, amount } = req.body;
+  // Catch bonusDrink from body
+  const { concertId, amount, bonusDrink } = req.body;
   const userId = req.user.id;
 
   const t = await sequelize.transaction();
@@ -64,7 +64,6 @@ app.post('/buy', authenticateJWT, async (req, res) => {
 
     if (!concert) throw new Error('Konser tidak ditemukan');
 
-// 1. Cek berapa tiket yang SUDAH dibeli user ini untuk konser ini sebelumnya
     const existingTickets = await Transaction.sum('amount', {
       where: {
         userId: userId,
@@ -73,15 +72,12 @@ app.post('/buy', authenticateJWT, async (req, res) => {
       transaction: t
     });
 
-    // Jika belum pernah beli, existingTickets akan null, jadi kita set ke 0
     const totalOwned = existingTickets || 0;
 
-    // 2. Cek apakah total tiket yang dimiliki + yang akan dibeli melebihi 2
     if (totalOwned + amount > 2) {
       throw new Error(`Maksimal total tiket per akun untuk satu konser adalah 2.`);
     }
 
-    // Validasi Waktu: Maksimal 1 minggu sebelum konser
     const now = new Date();
     const concertDate = new Date(concert.date);
     const deadline = new Date(concertDate.getTime() - (7 * 24 * 60 * 60 * 1000));
@@ -90,13 +86,10 @@ app.post('/buy', authenticateJWT, async (req, res) => {
       throw new Error('Penjualan ditutup. Pembelian harus dilakukan maksimal H-7 konser.');
     }
 
-    // Validasi Stok
     if (concert.stock < amount) throw new Error('Stok tidak mencukupi');
 
-    // Hitung Total Harga
     const total = concert.price * amount;
 
-    // Update Stok & Simpan Transaksi
     concert.stock -= amount;
     await concert.save({ transaction: t });
 
@@ -107,6 +100,21 @@ app.post('/buy', authenticateJWT, async (req, res) => {
       concertId: concertId
     }, { transaction: t });
 
+    // --- NEW LOGIC START ---
+    // If bonusDrink string exists (e.g., "Latte, Mocha"), split and save
+    if (bonusDrink && typeof bonusDrink === 'string') {
+        const drinkList = bonusDrink.split(', '); // Frontend joins with ", "
+        
+        // Loop and create addon entries
+        for (const drinkName of drinkList) {
+            await TransactionAddon.create({
+                transactionId: order.id,
+                item_name: drinkName
+            }, { transaction: t });
+        }
+    }
+    // --- NEW LOGIC END ---
+
     await t.commit();
     res.json({ message: "Pembelian berhasil!", order });
 
@@ -116,21 +124,25 @@ app.post('/buy', authenticateJWT, async (req, res) => {
   }
 });
 
-// --- ENDPOINT: LIHAT HISTORY PESANAN USER ---
+// ... (Rest of the file stays the same) ...
 app.get('/my-orders', authenticateJWT, async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Mencari semua transaksi milik user yang sedang login
+    // Optional: Include Addons in the history view
     const orders = await Transaction.findAll({
       where: { userId: userId },
       include: [
         {
           model: Concert,
-          attributes: ['name', 'artist', 'venue', 'date', 'price'] // Hanya ambil kolom yang penting
+          attributes: ['name', 'artist', 'venue', 'date', 'price']
+        },
+        {
+          model: TransactionAddon, // Include addons data
+          attributes: ['item_name']
         }
       ],
-      order: [['createdAt', 'DESC']] // Urutkan dari yang terbaru
+      order: [['createdAt', 'DESC']]
     });
 
     if (orders.length === 0) {
@@ -143,89 +155,89 @@ app.get('/my-orders', authenticateJWT, async (req, res) => {
   }
 });
 
-// --- SERVER START ---
 const PORT = process.env.PORT || 3000;
 
 sequelize.sync({ alter: true }).then(async () => {
   console.log('Database terhubung.');
-
+  // ... (Initial seeding logic stays the same) ...
   if (await Concert.count() === 0) {
-    await Concert.bulkCreate([
-      { 
-        name: 'POISONYA SYNDROME',
-        artist: 'Nekomata Okayu', 
-        price: 50, 
-        stock: 3000, 
-        venue: 'Tachikawa Stage Garden', 
-        date: new Date('2026-09-30 20:00:00') 
-      },
-      { 
-        name: 'PERSONYA RESPECT',
-        artist: 'Nekomata Okayu', 
-        price: 60, 
-        stock: 12000, 
-        venue: 'Pia Arena MM', 
-        date: new Date('2027-05-28 20:00:00') 
-      },
-      { 
-        name: "Ahoy!! You're All Pirates",
-        artist: 'Houshou Marine', 
-        price: 70, 
-        stock: 20000, 
-        venue: 'K-Arena', 
-        date: new Date('2026-12-07 19:00:00') 
-      },
-      {
-        name: 'FBKINGDOM "ANTHEM"',
-        artist: 'Fubuki Shirakami',
-        price: 60,
-        stock: 12000,
-        venue: 'Pia Arena MM',
-        date: new Date('2027-02-13 18:00:00')
-      },
-      { 
-        name: 'USAGI the MEGAMI!!-',
-        artist: 'Usada Pekora',
-        price: 55,
-        stock: 15000,
-        venue: 'Ariake Arena',
-        date: new Date('2026-12-06 18:00:00')
-      },
-      { 
-        name: 'Our Sparkle',
-        artist: 'Ookami Mio',
-        price: 50,
-        stock: 12000,
-        venue: 'Pia Arena MM',
-        date: new Date('2026-09-10 18:00:00')
-      },
-      { 
-        name: 'LOCK ON',
-        artist: 'Amane Kanata',
-        price: 52,
-        stock: 15000,
-        venue: 'Ariake Arena',
-        date: new Date('2026-08-13 18:00:00')
-      },
-      { 
-        name: 'Break your xxx',
-        artist: 'Tokoyami Towa',
-        price: 50,
-        stock: 3000,
-        venue: 'Tachikawa Stage Garden',
-        date: new Date('2026-10-13 18:00:00')
-      },
-      { 
-        name: 'SHINier',
-        artist: 'Tokoyami Towa',
-        price: 50,
-        stock: 15000,
-        venue: 'Ariake Arena',
-        date: new Date('2027-10-29 18:00:00')
-      },
-    ]);
+      // ... (your existing bulkCreate code) ...
+      await Concert.bulkCreate([
+        { 
+          name: 'POISONYA SYNDROME',
+          artist: 'Nekomata Okayu', 
+          price: 50, 
+          stock: 3000, 
+          venue: 'Tachikawa Stage Garden', 
+          date: new Date('2026-09-30 20:00:00') 
+        },
+        { 
+          name: 'PERSONYA RESPECT',
+          artist: 'Nekomata Okayu', 
+          price: 60, 
+          stock: 12000, 
+          venue: 'Pia Arena MM', 
+          date: new Date('2027-05-28 20:00:00') 
+        },
+        { 
+          name: "Ahoy!! You're All Pirates",
+          artist: 'Houshou Marine', 
+          price: 70, 
+          stock: 20000, 
+          venue: 'K-Arena', 
+          date: new Date('2026-12-07 19:00:00') 
+        },
+        {
+          name: 'FBKINGDOM "ANTHEM"',
+          artist: 'Fubuki Shirakami',
+          price: 60,
+          stock: 12000,
+          venue: 'Pia Arena MM',
+          date: new Date('2027-02-13 18:00:00')
+        },
+        { 
+          name: 'USAGI the MEGAMI!!-',
+          artist: 'Usada Pekora',
+          price: 55,
+          stock: 15000,
+          venue: 'Ariake Arena',
+          date: new Date('2026-12-06 18:00:00')
+        },
+        { 
+          name: 'Our Sparkle',
+          artist: 'Ookami Mio',
+          price: 50,
+          stock: 12000,
+          venue: 'Pia Arena MM',
+          date: new Date('2026-09-10 18:00:00')
+        },
+        { 
+          name: 'LOCK ON',
+          artist: 'Amane Kanata',
+          price: 52,
+          stock: 15000,
+          venue: 'Ariake Arena',
+          date: new Date('2026-08-13 18:00:00')
+        },
+        { 
+          name: 'Break your xxx',
+          artist: 'Tokoyami Towa',
+          price: 50,
+          stock: 3000,
+          venue: 'Tachikawa Stage Garden',
+          date: new Date('2026-10-13 18:00:00')
+        },
+        { 
+          name: 'SHINier',
+          artist: 'Tokoyami Towa',
+          price: 50,
+          stock: 15000,
+          venue: 'Ariake Arena',
+          date: new Date('2027-10-29 18:00:00')
+        },
+      ]);
   }
-
+  
   if (await User.count() === 0) {
       const hashedPassword = await bcrypt.hash('nyannyan', 10);
       await User.create({
